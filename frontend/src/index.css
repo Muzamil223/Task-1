@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+
+@theme {
+  --FONT-HEADING: "Playfair Display", serif;
+  --FONT-BODY: "Poppins", sans-serif;
+  
+  --COLOR-BACKGROUND: #f9fafb;
+  --COLOR-TEXT: #111827;
+}
+
+@layer base {
+  * {
+    font-family: var(--FONT-BODY);
+  }
+
+  h1, h2, h3 {
+    font-family: var(--FONT-HEADING);
+  }
+
+  body {
+    background-color: var(--COLOR-BACKGROUND);
+    color: var(--COLOR-TEXT);
+  }
+}
