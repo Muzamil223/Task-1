@@ -5,8 +5,14 @@ const isOwnerOrAdmin = (task, user) =>
   user.role === "admin" || String(task.createdBy) === String(user.id);
 
 // Helper: Check if user is the one assigned to the task
-const isAssignedUser = (task, user) =>
-  task.assignedTo && String(task.assignedTo) === String(user.id);
+const isAssignedUser = (task, user) => {
+  if (!task.assignedTo) return false;
+  // assignedTo may be a populated object or a raw ObjectId
+  const assignedId = task.assignedTo._id
+    ? String(task.assignedTo._id)
+    : String(task.assignedTo);
+  return assignedId === String(user.id);
+};
 
 // GET /api/tasks
 const getTasks = async (req, res) => {
@@ -80,39 +86,15 @@ const updateTask = async (req, res) => {
     const existing = await Task.findById(req.params.id);
     if (!existing) return res.status(404).json({ message: "Task not found" });
 
-    const {
-      title,
-      description,
-      status,
-      priority,
-      dueDate,
-      assignedTo,
-      _statusOnly,
-    } = req.body;
+    const { title, description, status, priority, dueDate, assignedTo } =
+      req.body;
 
-    // Check if user is assigned to this task
-    const isAssigned = isAssignedUser(existing, req.user);
-
-    // If user is assigned and only updating status, allow it immediately
-    if (_statusOnly && isAssigned) {
-      const task = await Task.findByIdAndUpdate(
-        req.params.id,
-        { status },
-        { new: true, runValidators: true },
-      )
-        .populate("assignedTo", "name email")
-        .populate("createdBy", "name email");
-      return res.json(task);
-    }
-
-    // Otherwise, check for Owner or Admin permissions
     if (!isOwnerOrAdmin(existing, req.user)) {
       return res
         .status(403)
         .json({ message: "Not authorized to edit this task" });
     }
 
-    // Only admins can change the assignee of a task
     const resolvedAssignee =
       req.user.role === "admin" ? assignedTo : existing.assignedTo;
 
@@ -126,7 +108,7 @@ const updateTask = async (req, res) => {
         dueDate: dueDate || null,
         assignedTo: resolvedAssignee,
       },
-      { new: true, runValidators: true },
+      { new: true, runValidators: true }
     )
       .populate("assignedTo", "name email")
       .populate("createdBy", "name email");
@@ -137,15 +119,21 @@ const updateTask = async (req, res) => {
   }
 };
 
-// PATCH /api/tasks/:id/status — For Drag and Drop
+// PATCH /api/tasks/:id/status — For Drag and Drop + assigned user status updates
 const moveTask = async (req, res) => {
   try {
     const existing = await Task.findById(req.params.id);
     if (!existing) return res.status(404).json({ message: "Task not found" });
 
-    // Allow if Admin, Creator, OR Assigned User
+    const assignedId = existing.assignedTo
+      ? String(existing.assignedTo)
+      : null;
+    const userId = String(req.user.id);
+
     const canMove =
-      isOwnerOrAdmin(existing, req.user) || isAssignedUser(existing, req.user);
+      req.user.role === "admin" ||
+      String(existing.createdBy) === userId ||
+      assignedId === userId;
 
     if (!canMove) {
       return res
@@ -157,7 +145,7 @@ const moveTask = async (req, res) => {
     const task = await Task.findByIdAndUpdate(
       req.params.id,
       { status },
-      { new: true, runValidators: true },
+      { new: true, runValidators: true }
     )
       .populate("assignedTo", "name email")
       .populate("createdBy", "name email");

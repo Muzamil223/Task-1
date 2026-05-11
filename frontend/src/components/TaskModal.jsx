@@ -24,8 +24,10 @@ export default function TaskModal({
   const isEditing = Boolean(task);
   const isOwner = String(task?.createdBy?._id) === String(currentUser?._id);
   const isAssigned = String(task?.assignedTo?._id) === String(currentUser?._id);
-  const canFullyEdit = isAdmin || isOwner; // Can edit all fields
-  const canChangeStatus = isAdmin || isOwner || isAssigned; // Can change status only if assigned too
+  const canFullyEdit = isAdmin || isOwner;
+  // Assigned users who aren't owner/admin can only update status
+  const statusOnly = isEditing && isAssigned && !canFullyEdit;
+
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -57,17 +59,14 @@ export default function TaskModal({
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const isStatusOnly = isAssigned && !canFullyEdit;
-
-    // Skip title validation for status-only updates
-    if (!isStatusOnly && !form.title.trim()) {
+    if (!statusOnly && !form.title.trim()) {
       return setError("Title is required");
     }
 
     setError("");
     setSaving(true);
     try {
-      if (isStatusOnly) {
+      if (statusOnly) {
         await onSave({ status: form.status, _statusOnly: true });
       } else {
         await onSave({
@@ -84,13 +83,12 @@ export default function TaskModal({
   };
 
   const handleMarkDone = async () => {
-    if (form.status === "done") return;
     setError("");
     setSaving(true);
     try {
       await onSave({ status: "done", _statusOnly: true });
     } catch (err) {
-      setError(err.response?.data?.message || "Save failed");
+      setError(err.response?.data?.message || "Failed to mark as done");
     } finally {
       setSaving(false);
     }
@@ -112,7 +110,7 @@ export default function TaskModal({
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-xl font-heading text-black">
-            {isEditing ? "Edit Task" : "New Task"}
+            {isEditing ? (statusOnly ? "View Task" : "Edit Task") : "New Task"}
           </h2>
           <button
             onClick={onClose}
@@ -128,24 +126,24 @@ export default function TaskModal({
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Show info for assigned users */}
-          {isAssigned && !canFullyEdit && (
-            <div className="mb-4 text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2">
-              ✓ You can view task details and change status to mark it as done
-            </div>
-          )}
+        {/* Banner for assigned-only users */}
+        {statusOnly && (
+          <div className="mb-4 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2">
+            You are assigned to this task. You can update its status or mark it as done.
+          </div>
+        )}
 
+        <form onSubmit={handleSubmit} className="space-y-4">
           {/* Title */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Title *
+              Title {!statusOnly && "*"}
             </label>
             <input
               name="title"
               value={form.title}
               onChange={handleChange}
-              required
+              required={!statusOnly}
               placeholder="Task title"
               disabled={!canFullyEdit}
               className={`w-full border rounded-lg px-4 py-2.5 text-sm focus:outline-none
@@ -223,9 +221,7 @@ export default function TaskModal({
           </div>
 
           {/* Due Date + Assign row */}
-          <div
-            className={`grid gap-3 ${isAdmin ? "grid-cols-2" : "grid-cols-1"}`}
-          >
+          <div className={`grid gap-3 ${isAdmin ? "grid-cols-2" : "grid-cols-1"}`}>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Due Date
@@ -269,7 +265,7 @@ export default function TaskModal({
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Assigned To
                 </label>
-                <div className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm bg-gray-50 text-gray-700">
+                <div className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-gray-50 text-gray-700">
                   {task.assignedTo.name}
                 </div>
               </div>
@@ -290,6 +286,7 @@ export default function TaskModal({
             ) : (
               <span />
             )}
+
             <div className="flex gap-2">
               <button
                 type="button"
@@ -298,16 +295,19 @@ export default function TaskModal({
               >
                 Cancel
               </button>
-              {isAssigned && !canFullyEdit && form.status !== "done" && (
+
+              {/* Mark as Done button — shown to assigned users when task isn't done yet */}
+              {statusOnly && form.status !== "done" && (
                 <button
                   type="button"
                   onClick={handleMarkDone}
                   disabled={saving}
-                  className="text-sm bg-green-600 text-white rounded-lg px-5 py-2 disabled:opacity-50"
+                  className="text-sm bg-green-600 text-white rounded-lg px-5 py-2 disabled:opacity-50 hover:bg-green-700"
                 >
-                  Mark as Done
+                  {saving ? "Saving..." : "✓ Mark as Done"}
                 </button>
               )}
+
               <button
                 type="submit"
                 disabled={saving}
@@ -315,11 +315,11 @@ export default function TaskModal({
               >
                 {saving
                   ? "Saving..."
-                  : isAssigned && !canFullyEdit
-                    ? "Update Status"
-                    : isEditing
-                      ? "Update"
-                      : "Create"}
+                  : statusOnly
+                  ? "Update Status"
+                  : isEditing
+                  ? "Update"
+                  : "Create"}
               </button>
             </div>
           </div>

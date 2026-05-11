@@ -25,7 +25,6 @@ export default function DashboardPage() {
   }, []);
 
   const fetchUsers = useCallback(async () => {
-    // Only admins are allowed — backend also enforces this
     if (!isAdmin) return;
     try {
       const res = await api.get("/auth/users");
@@ -45,7 +44,6 @@ export default function DashboardPage() {
   };
 
   const openEditModal = (task) => {
-    // Users can view any task they can see (created, assigned, or admin)
     const isOwner = String(task.createdBy?._id) === String(user?._id);
     const isAssigned = String(task.assignedTo?._id) === String(user?._id);
     const canView = isAdmin || isOwner || isAssigned;
@@ -57,10 +55,20 @@ export default function DashboardPage() {
   const handleTaskSave = async (formData) => {
     try {
       if (editingTask) {
-        const res = await api.put(`/tasks/${editingTask._id}`, formData);
-        setTasks((prev) =>
-          prev.map((t) => (t._id === res.data._id ? res.data : t)),
-        );
+        // If it's a status-only update (assigned user marking done), use PATCH
+        if (formData._statusOnly) {
+          const res = await api.patch(`/tasks/${editingTask._id}/status`, {
+            status: formData.status,
+          });
+          setTasks((prev) =>
+            prev.map((t) => (t._id === res.data._id ? res.data : t)),
+          );
+        } else {
+          const res = await api.put(`/tasks/${editingTask._id}`, formData);
+          setTasks((prev) =>
+            prev.map((t) => (t._id === res.data._id ? res.data : t)),
+          );
+        }
       } else {
         const res = await api.post("/tasks", formData);
         setTasks((prev) => [res.data, ...prev]);
@@ -115,7 +123,7 @@ export default function DashboardPage() {
             {!isAdmin && (
               <p className="text-xs text-gray-400 mt-0.5">
                 You can create and manage your own tasks. Click a task you
-                created to edit it.
+                created or are assigned to.
               </p>
             )}
           </div>
@@ -127,7 +135,6 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        {/* Admin-only overview stats */}
         {isAdmin && (
           <div className="grid grid-cols-3 gap-3 mb-6">
             {[
